@@ -12,8 +12,8 @@ from typing import List, Dict, Any
 
 def _get_marker_shape(station_id: str) -> str:
     """Determines marker shape based on station code prefix."""
-    if station_id.startswith("USW"):
-        return "triangle"
+    # if station_id.startswith("USW"):
+    #     return "triangle"
     if station_id.startswith("USC"):
         return "circle"
     return "circle" # Default shape
@@ -24,11 +24,10 @@ def _get_color_from_slope(slope: float, min_slope: float, max_slope: float) -> s
     Negative slopes are blue, positive are red.
     """
     # Normalize the slope to the range [0, 1] for the colormap
-    # We use a diverging normalizer to center the colormap on zero
-    norm = matplotlib.colors.DivergingNorm(vmin=min_slope, vcenter=0, vmax=max_slope)
+    norm = matplotlib.colors.Normalize(vmin=min_slope, vmax=max_slope)
 
     # Use a diverging colormap
-    cmap = cm.get_cmap('seismic') # seismic is a great blue-white-red map
+    cmap = cm.get_cmap('Reds')
 
     rgba_color = cmap(norm(slope))
     return colors.rgb2hex(rgba_color)
@@ -72,7 +71,8 @@ def create_station_map(
         popup_html = (
             f"<b>{station.get('StationName', 'N/A')} ({station.get('StationID', 'N/A')})</b><br>"
             f"<b>Elevation:</b> {station.get('Elevation', 'N/A'):.1f} m<br>"
-            f"<b>Slope:</b> {station.get('slope', 0):.4f} °C/°C<br>"
+            f"<b>Observed Slope:</b> {station.get('slope', 0):.4f} °C/°C<br>"
+            f"<b>Model Slope:</b> {station.get('model_slope', 'N/A'):.4f}<br>"
             f"<b>R²:</b> {station.get('r_squared', 0):.4f}<br><hr>"
             "<b>Plots:</b><br>"
             f"<a href='{station.get('regression_plot', '#')}' target='_blank'>Regression</a> | "
