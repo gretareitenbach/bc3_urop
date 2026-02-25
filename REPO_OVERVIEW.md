@@ -44,9 +44,6 @@ This document summarizes what each file in this workspace does, based on the cur
   - Builds the interactive Folium map.
   - Colors stations by slope and inserts plot links and metadata into popups.
 
-- climate_analysis/enhance_and_remap.py
-  - Enhances output/station_data.csv with model-predicted slopes from a NetCDF file.
-  - Overwrites the CSV and regenerates the interactive map.
 
 ## Multilinear analysis: multilinear/
 
@@ -72,7 +69,7 @@ These are local data assets used by the scripts. The folder is ignored by git.
   - GHCN-M station monthly TAVG records used to compute annual station averages.
 
 - data/PatternScalingCoefficients_tas_ssp245-ssp370__r240x120.nc
-  - NetCDF file with model slope coefficients, used by climate_analysis/enhance_and_remap.py.
+  - NetCDF file with model slope coefficients (currently unused).
 
 - data/grid_10min_reh.dat
   - Expected gridded humidity climatology (not present in this workspace, but required by add_climatological_features.py).
