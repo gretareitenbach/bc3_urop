@@ -32,6 +32,17 @@ def _get_color_from_slope(slope: float, min_slope: float, max_slope: float) -> s
     rgba_color = cmap(norm(slope))
     return colors.rgb2hex(rgba_color)
 
+def _format_optional_float(value: Any, precision: int = 4) -> str:
+    """
+    Formats numeric values with a fixed precision, or returns 'N/A'.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "N/A"
+    try:
+        return f"{float(value):.{precision}f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
 def create_station_map(
     station_data: List[Dict[str, Any]],
     output_path: Path,
@@ -70,10 +81,10 @@ def create_station_map(
         # Create the HTML content for the popup
         popup_html = (
             f"<b>{station.get('StationName', 'N/A')} ({station.get('StationID', 'N/A')})</b><br>"
-            f"<b>Elevation:</b> {station.get('Elevation', 'N/A'):.1f} m<br>"
-            f"<b>Observed Slope:</b> {station.get('slope', 0):.4f} °C/°C<br>"
-            f"<b>Model Slope:</b> {station.get('model_slope', 'N/A'):.4f}<br>"
-            f"<b>R²:</b> {station.get('r_squared', 0):.4f}<br><hr>"
+            f"<b>Elevation:</b> {_format_optional_float(station.get('Elevation'), precision=1)} m<br>"
+            f"<b>Observed Slope:</b> {_format_optional_float(station.get('slope'))} °C/°C<br>"
+            f"<b>Model Slope:</b> {_format_optional_float(station.get('model_slope'))}<br>"
+            f"<b>R²:</b> {_format_optional_float(station.get('r_squared'))}<br><hr>"
             "<b>Plots:</b><br>"
             f"<a href='{station.get('regression_plot', '#')}' target='_blank'>Regression</a> | "
             f"<a href='{station.get('residual_plot', '#')}' target='_blank'>Residual</a> | "

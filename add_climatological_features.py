@@ -42,7 +42,7 @@ OUTPUT_DIR = BASE_DIR / "output"
 STATION_CSV_FILE = OUTPUT_DIR / "station_data.csv"
 
 # Data source files
-STATION_DATA_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20251007.qcf.dat"
+STATION_DATA_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20260224.qcf.dat"
 HUMIDITY_FILE = DATA_DIR / "grid_10min_reh.dat" # Your humidity file
 
 def calculate_climo_temp(station_id: str, station_dat_file: Path) -> float:
