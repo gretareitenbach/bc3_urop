@@ -22,8 +22,8 @@ PLOT_DIR = OUTPUT_DIR / "plots"
 
 # --- UPDATED FILE NAMES ---
 GLOBAL_DATA_FILE = DATA_DIR / "global_temps.txt"
-STATION_INV_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20251007.qcf.inv"
-STATION_DATA_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20251007.qcf.dat"
+STATION_INV_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20260224.qcf.inv"
+STATION_DATA_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20260224.qcf.dat"
 
 # Output file paths
 STATION_CSV_OUTPUT = OUTPUT_DIR / "station_data.csv"
