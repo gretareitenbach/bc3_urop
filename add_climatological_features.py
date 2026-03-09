@@ -82,9 +82,9 @@ def load_humidity_data(humidity_file_path: Path) -> xr.DataArray:
         df = pd.read_csv(
             humidity_file_path,
             sep='\s+',
-            engine='python',
             header=None,
-            names=['lat', 'lon', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+            names=['lat', 'lon', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            encoding='latin-1'
         )
 
         print(f"-> Loaded raw table with {len(df)} grid points.")
