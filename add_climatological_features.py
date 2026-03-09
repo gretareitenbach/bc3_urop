@@ -81,7 +81,8 @@ def load_humidity_data(humidity_file_path: Path) -> xr.DataArray:
         # If the first line IS a header, remove 'header=None'.
         df = pd.read_csv(
             humidity_file_path,
-            delim_whitespace=True,
+            sep='\s+',
+            engine='python',
             header=None,
             names=['lat', 'lon', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         )
