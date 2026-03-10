@@ -4,4 +4,6 @@ tqdm
 xarray
 folium
 matplotlib
+seaborn
 statsmodels
+scikit-learn
