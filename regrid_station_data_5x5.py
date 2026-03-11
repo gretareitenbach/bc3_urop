@@ -60,6 +60,18 @@ def aggregate_grid_means(df: pd.DataFrame, grid_size: int = 5) -> pd.DataFrame:
     grouped = binned.groupby(["lat_bin", "lon_bin"], as_index=False)
     aggregated = grouped[numeric_columns].mean()
 
+    if "slope" in binned.columns:
+        slope_stats = (
+            binned.groupby(["lat_bin", "lon_bin"])["slope"]
+            .agg([
+                ("slope_min", "min"),
+                ("slope_max", "max"),
+                ("slope_std", lambda values: values.std(ddof=0)),
+            ])
+            .reset_index()
+        )
+        aggregated = aggregated.merge(slope_stats, on=["lat_bin", "lon_bin"], how="left")
+
     counts = binned.groupby(["lat_bin", "lon_bin"]).size().reset_index()
     counts.columns = ["lat_bin", "lon_bin", "station_count"]
     aggregated = aggregated.merge(counts, on=["lat_bin", "lon_bin"], how="left")
@@ -91,6 +103,98 @@ def aggregate_grid_means(df: pd.DataFrame, grid_size: int = 5) -> pd.DataFrame:
 def format_metric_name(name: str) -> str:
     """Create a readable label for popup display."""
     return name.replace("_", " ").title()
+
+
+def format_popup_value(value, precision=2):
+    """Format popup values consistently, returning N/A for missing values."""
+    if pd.isna(value):
+        return "N/A"
+    return "{0:.{1}f}".format(float(value), precision)
+
+
+def add_station_count_slider(
+    world_map: folium.Map,
+    layer_thresholds: list,
+    min_count: int,
+    max_count: int,
+) -> None:
+    """Add a slider control that filters cells by minimum station count."""
+    map_name = world_map.get_name()
+    slider_id = "station-count-slider-{0}".format(map_name)
+    value_id = "station-count-value-{0}".format(map_name)
+    control_id = "station-count-filter-{0}".format(map_name)
+
+    slider_html = """
+    <div id="{control_id}" style="position: fixed; bottom: 40px; left: 40px;
+         z-index: 9999; background-color: rgba(255, 255, 255, 0.95);
+         padding: 12px 14px; border: 1px solid #bdbdbd; border-radius: 6px;
+         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18); min-width: 250px;">
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">
+            Minimum stations per cell: <span id="{value_id}">{min_count}</span>
+        </div>
+        <input id="{slider_id}" type="range" min="{min_count}" max="{max_count}"
+               step="1" value="{min_count}" style="width: 100%;">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 6px; color: #555;">
+            <span>{min_count}</span>
+            <span>{max_count}</span>
+        </div>
+    </div>
+    """.format(
+        control_id=control_id,
+        slider_id=slider_id,
+        value_id=value_id,
+        min_count=min_count,
+        max_count=max_count,
+    )
+    world_map.get_root().html.add_child(folium.Element(slider_html))
+
+    layer_config_js = ",\n".join(layer_thresholds)
+    slider_script = """
+    setTimeout(function() {{
+        var mapRef = window["{map_name}"];
+        var slider = document.getElementById("{slider_id}");
+        var valueLabel = document.getElementById("{value_id}");
+        var control = document.getElementById("{control_id}");
+        var layerConfigs = [
+            {layer_config_js}
+        ];
+
+        function applyStationCountFilter() {{
+            var threshold = parseInt(slider.value, 10);
+            valueLabel.textContent = threshold;
+
+            for (var i = 0; i < layerConfigs.length; i++) {{
+                var layerConfig = layerConfigs[i];
+                if (layerConfig.stationCount >= threshold) {{
+                    if (!mapRef.hasLayer(layerConfig.layer)) {{
+                        layerConfig.layer.addTo(mapRef);
+                    }}
+                }} else if (mapRef.hasLayer(layerConfig.layer)) {{
+                    mapRef.removeLayer(layerConfig.layer);
+                }}
+            }}
+        }}
+
+        if (control && window.L && window.L.DomEvent) {{
+            L.DomEvent.disableClickPropagation(control);
+            L.DomEvent.disableScrollPropagation(control);
+        }}
+
+        if (!mapRef || !slider || !valueLabel) {{
+            return;
+        }}
+
+        slider.addEventListener("input", applyStationCountFilter);
+        applyStationCountFilter();
+    }}, 0);
+    """.format(
+        map_name=map_name,
+        slider_id=slider_id,
+        value_id=value_id,
+        control_id=control_id,
+        layer_config_js=layer_config_js,
+    )
+    world_map.get_root().script.add_child(folium.Element(slider_script))
 
 
 def create_filled_grid_map(
@@ -130,30 +234,34 @@ def create_filled_grid_map(
         tiles="CartoDB positron",
     )
 
-    popup_metric_columns = [
-        c
-        for c in grid_df.select_dtypes(include=[np.number]).columns
-        if c not in {"lat_bin", "lon_bin", "lat_min", "lat_max", "lon_min", "lon_max"}
-    ]
+    layer_thresholds = []
 
     for _, row in grid_df.iterrows():
         metric_value = float(row[color_metric])
         fill_color = colormap(metric_value)
 
-        popup_lines = [
-            f"<b>Grid Cell:</b> {row['cell_id']}",
-            f"<b>Bounds:</b> [{row['lat_min']}, {row['lat_max']}) lat, [{row['lon_min']}, {row['lon_max']}) lon",
-        ]
+        slope_range = "N/A"
+        if not pd.isna(row.get("slope_min")) and not pd.isna(row.get("slope_max")):
+            slope_range = "({0} to {1})".format(
+                format_popup_value(row.get("slope_min")),
+                format_popup_value(row.get("slope_max")),
+            )
 
-        for col in popup_metric_columns:
-            val = row[col]
-            if pd.isna(val):
-                display = "N/A"
-            elif col == "station_count":
-                display = str(int(val))
-            else:
-                display = f"{float(val):.4f}"
-            popup_lines.append(f"<b>{format_metric_name(col)}:</b> {display}")
+        slope_display = format_popup_value(row.get("slope"))
+        if slope_range != "N/A":
+            slope_display = "{0} {1}".format(slope_display, slope_range)
+
+        popup_lines = [
+            f"<b>Bounds:</b> [{row['lat_min']}, {row['lat_max']}) lat, [{row['lon_min']}, {row['lon_max']}) lon",
+            f"<b>Station Count:</b> {int(row['station_count'])}",
+            f"<b>Slope:</b> {slope_display}",
+            f"<b>Standard Deviation:</b> {format_popup_value(row.get('slope_std'))}",
+            f"<b>Intercept:</b> {format_popup_value(row.get('intercept'))}",
+            f"<b>R2:</b> {format_popup_value(row.get('r_squared'))}",
+            f"<b>Climo Temp:</b> {format_popup_value(row.get('climo_temp'))}",
+            f"<b>Climo Humidity:</b> {format_popup_value(row.get('climo_humidity'))}",
+            f"<b>Elevation:</b> {format_popup_value(row.get('Elevation'))}",
+        ]
 
         popup_html = "<br>".join(popup_lines)
 
@@ -162,7 +270,7 @@ def create_filled_grid_map(
             [row["lat_max"], row["lon_max"]],
         ]
 
-        folium.Rectangle(
+        rectangle = folium.Rectangle(
             bounds=bounds,
             stroke=False,
             fill=True,
@@ -170,12 +278,25 @@ def create_filled_grid_map(
             fill_opacity=0.7,
             popup=folium.Popup(popup_html, max_width=320),
             tooltip=(
-                f"Cell {row['cell_id']} | {format_metric_name(color_metric)}: "
-                f"{metric_value:.4f} | Stations: {int(row['station_count'])}"
+                f"[{row['lat_min']}, {row['lat_max']}), [{row['lon_min']}, {row['lon_max']}) | {format_metric_name(color_metric)}: "
+                f"{metric_value:.2f} | Stations: {int(row['station_count'])}"
             ),
-        ).add_to(world_map)
+        )
+        rectangle.add_to(world_map)
+        layer_thresholds.append(
+            "{{layer: {layer_name}, stationCount: {station_count}}}".format(
+                layer_name=rectangle.get_name(),
+                station_count=int(row["station_count"]),
+            )
+        )
 
     colormap.add_to(world_map)
+    add_station_count_slider(
+        world_map,
+        layer_thresholds=layer_thresholds,
+        min_count=int(grid_df["station_count"].min()),
+        max_count=int(grid_df["station_count"].max()),
+    )
 
     output_map.parent.mkdir(parents=True, exist_ok=True)
     world_map.save(str(output_map))
