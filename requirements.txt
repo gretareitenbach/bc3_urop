@@ -7,3 +7,5 @@ matplotlib
 seaborn
 statsmodels
 scikit-learn
+plotly
+global-land-mask

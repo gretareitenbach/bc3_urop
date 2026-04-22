@@ -8,7 +8,16 @@ import matplotlib
 import matplotlib.cm as cm
 import matplotlib.colors as colors
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
+
+# Fixed scale so all yellow-red slope maps are directly comparable.
+SHARED_SLOPE_MIN = -1.0
+SHARED_SLOPE_MAX = 3.1
+
+
+def get_shared_slope_scale() -> Tuple[float, float]:
+    """Return the fixed min/max range for slope colormaps."""
+    return SHARED_SLOPE_MIN, SHARED_SLOPE_MAX
 
 def _get_marker_shape(station_id: str) -> str:
     """Determines marker shape based on station code prefix."""
@@ -68,9 +77,8 @@ def create_station_map(
     # Create a base map
     m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start, tiles="CartoDB positron")
 
-    # Find the min and max slopes for color normalization
-    slopes = [s['slope'] for s in station_data if 'slope' in s and pd.notna(s['slope'])]
-    min_s, max_s = min(slopes), max(slopes)
+    # Use one fixed slope scale so all maps are directly comparable.
+    min_s, max_s = get_shared_slope_scale()
 
     # Add each station as a marker to the map
     for station in station_data:

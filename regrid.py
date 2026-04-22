@@ -10,13 +10,16 @@ This script:
 """
 
 import argparse
+import warnings
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import folium
 import numpy as np
 import pandas as pd
 from branca.colormap import linear
+
+from climate_analysis.mapping import get_shared_slope_scale
 
 
 def normalize_longitude(longitude: pd.Series) -> pd.Series:
@@ -110,6 +113,57 @@ def format_popup_value(value, precision=2):
     if pd.isna(value):
         return "N/A"
     return "{0:.{1}f}".format(float(value), precision)
+
+
+def _format_tooltip_value(value, precision=2):
+    """Format values for compact tooltip display."""
+    if pd.isna(value):
+        return "N/A"
+    return "{0:.{1}f}".format(float(value), precision)
+
+
+def _load_model_predictions(predictions_csv: Path, column_name: str) -> Optional[pd.DataFrame]:
+    """Load a model prediction CSV and return cell_id + renamed predicted slope."""
+    if not predictions_csv.exists():
+        warnings.warn(f"Model predictions file not found: {predictions_csv}")
+        return None
+
+    predictions_df = pd.read_csv(predictions_csv)
+    required_cols = {"cell_id", "Predicted_Slope"}
+    missing = [c for c in required_cols if c not in predictions_df.columns]
+    if missing:
+        warnings.warn(
+            f"Model predictions file is missing required columns {missing}: {predictions_csv}"
+        )
+        return None
+
+    model_df = predictions_df[["cell_id", "Predicted_Slope"]].drop_duplicates(subset=["cell_id"])
+    return model_df.rename(columns={"Predicted_Slope": column_name})
+
+
+def add_model_slopes_to_grid(
+    grid_df: pd.DataFrame,
+    multilinear_predictions_csv: Path,
+    decision_tree_predictions_csv: Path,
+) -> pd.DataFrame:
+    """Attach multilinear and decision-tree predicted slopes to each grid cell by cell_id."""
+    enriched = grid_df.copy()
+
+    multilinear_df = _load_model_predictions(
+        multilinear_predictions_csv,
+        column_name="multilinear_predicted_slope",
+    )
+    if multilinear_df is not None:
+        enriched = enriched.merge(multilinear_df, on="cell_id", how="left")
+
+    decision_tree_df = _load_model_predictions(
+        decision_tree_predictions_csv,
+        column_name="decision_tree_predicted_slope",
+    )
+    if decision_tree_df is not None:
+        enriched = enriched.merge(decision_tree_df, on="cell_id", how="left")
+
+    return enriched
 
 
 def add_station_count_slider(
@@ -221,6 +275,9 @@ def create_filled_grid_map(
     value_min = float(grid_df[color_metric].min())
     value_max = float(grid_df[color_metric].max())
 
+    if color_metric == "slope":
+        value_min, value_max = get_shared_slope_scale()
+
     if np.isclose(value_min, value_max):
         colormap = linear.YlOrRd_09.scale(value_min - 1.0, value_max + 1.0)
     else:
@@ -255,6 +312,8 @@ def create_filled_grid_map(
             f"<b>Bounds:</b> [{row['lat_min']}, {row['lat_max']}) lat, [{row['lon_min']}, {row['lon_max']}) lon",
             f"<b>Station Count:</b> {int(row['station_count'])}",
             f"<b>Slope:</b> {slope_display}",
+            f"<b>Multilinear Slope:</b> {format_popup_value(row.get('multilinear_predicted_slope'))}",
+            f"<b>Tree Slope:</b> {format_popup_value(row.get('decision_tree_predicted_slope'))}",
             f"<b>Standard Deviation:</b> {format_popup_value(row.get('slope_std'))}",
             f"<b>Intercept:</b> {format_popup_value(row.get('intercept'))}",
             f"<b>R2:</b> {format_popup_value(row.get('r_squared'))}",
@@ -279,7 +338,9 @@ def create_filled_grid_map(
             popup=folium.Popup(popup_html, max_width=320),
             tooltip=(
                 f"[{row['lat_min']}, {row['lat_max']}), [{row['lon_min']}, {row['lon_max']}) | {format_metric_name(color_metric)}: "
-                f"{metric_value:.2f} | Stations: {int(row['station_count'])}"
+                f"{metric_value:.2f} | Multi: {_format_tooltip_value(row.get('multilinear_predicted_slope'))} "
+                f"| Tree: {_format_tooltip_value(row.get('decision_tree_predicted_slope'))} "
+                f"| Stations: {int(row['station_count'])}"
             ),
         )
         rectangle.add_to(world_map)
@@ -308,6 +369,8 @@ def run_regridding(
     output_map: Path,
     grid_size: int,
     color_metric: str,
+    multilinear_predictions_csv: Path,
+    decision_tree_predictions_csv: Path,
 ) -> None:
     """Execute 5x5 regridding and map generation."""
     if not input_csv.exists():
@@ -321,6 +384,11 @@ def run_regridding(
         raise ValueError(f"Missing required columns: {missing}")
 
     grid_df = aggregate_grid_means(df, grid_size=grid_size)
+    grid_df = add_model_slopes_to_grid(
+        grid_df,
+        multilinear_predictions_csv=multilinear_predictions_csv,
+        decision_tree_predictions_csv=decision_tree_predictions_csv,
+    )
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     grid_df.to_csv(output_csv, index=False)
@@ -368,6 +436,18 @@ def parse_args() -> argparse.Namespace:
         default="slope",
         help="Numeric aggregated metric used to color grid cells.",
     )
+    parser.add_argument(
+        "--multilinear-predictions-csv",
+        type=Path,
+        default=Path("multilinear/notebook_outputs/multilinear/predictions.csv"),
+        help="Path to multilinear notebook predictions.csv (cell_id + Predicted_Slope).",
+    )
+    parser.add_argument(
+        "--decision-tree-predictions-csv",
+        type=Path,
+        default=Path("multilinear/notebook_outputs/decision_tree/predictions.csv"),
+        help="Path to decision-tree notebook predictions.csv (cell_id + Predicted_Slope).",
+    )
     return parser.parse_args()
 
 
@@ -379,4 +459,6 @@ if __name__ == "__main__":
         output_map=args.output_map,
         grid_size=args.grid_size,
         color_metric=args.color_metric,
+        multilinear_predictions_csv=args.multilinear_predictions_csv,
+        decision_tree_predictions_csv=args.decision_tree_predictions_csv,
     )
