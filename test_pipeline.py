@@ -19,7 +19,7 @@ STATION_INV_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20260224.qcf.inv"
 STATION_DATA_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20260224.qcf.dat"
 
 STATION_CSV_OUTPUT = OUTPUT_DIR / "station_data.csv"
-MAP_HTML_OUTPUT = OUTPUT_DIR / "world_climate_map.html"
+MAP_HTML_OUTPUT = OUTPUT_DIR / "maps" / "world_climate_map.html"
 
 SAMPLE_SIZE = 100
 RANDOM_SEED = 29

@@ -266,7 +266,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-html",
         type=Path,
-        default=Path("output/world_climate_map_grid_5x5_globe.html"),
+        default=Path("output/globe/world_climate_map_grid_5x5_globe.html"),
         help="Output HTML path for the interactive globe.",
     )
     parser.add_argument(

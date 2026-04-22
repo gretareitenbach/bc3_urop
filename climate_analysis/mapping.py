@@ -4,6 +4,7 @@ Handles the creation of interactive Folium maps.
 
 import pandas as pd
 import folium
+import plotly.graph_objects as go
 import matplotlib
 import matplotlib.cm as cm
 import matplotlib.colors as colors
@@ -18,6 +19,19 @@ SHARED_SLOPE_MAX = 3.1
 def get_shared_slope_scale() -> Tuple[float, float]:
     """Return the fixed min/max range for slope colormaps."""
     return SHARED_SLOPE_MIN, SHARED_SLOPE_MAX
+
+
+def _derive_map_output_path(output_path: Path) -> Path:
+    """Route flat map outputs to a maps subfolder."""
+    if output_path.parent.name == "maps":
+        return output_path
+    return output_path.parent / "maps" / output_path.name
+
+
+def _derive_globe_output_path(output_path: Path) -> Path:
+    """Return companion globe path in a sibling globe folder."""
+    map_path = _derive_map_output_path(output_path)
+    return map_path.parent.parent / "globe" / f"{map_path.stem}_globe{map_path.suffix}"
 
 def _get_marker_shape(station_id: str) -> str:
     """Determines marker shape based on station code prefix."""
@@ -118,6 +132,74 @@ def create_station_map(
                 popup=popup,
             ).add_to(m)
 
-    # Save the map to the specified HTML file
-    m.save(str(output_path))
-    print(f"Map successfully saved to {output_path}")
+    # Save flat map under maps/ and globe under globe/.
+    map_output = _derive_map_output_path(output_path)
+    map_output.parent.mkdir(parents=True, exist_ok=True)
+    m.save(str(map_output))
+    print(f"Map successfully saved to {map_output}")
+
+    globe_output = _derive_globe_output_path(map_output)
+    create_station_globe_map(station_data=station_data, output_path=globe_output)
+    print(f"Globe map successfully saved to {globe_output}")
+
+
+def create_station_globe_map(
+    station_data: List[Dict[str, Any]],
+    output_path: Path,
+) -> None:
+    """Create an orthographic globe map with station markers."""
+    if not station_data:
+        return
+
+    df = pd.DataFrame(station_data)
+
+    if "Latitude" not in df.columns or "Longitude" not in df.columns:
+        return
+
+    min_s, max_s = get_shared_slope_scale()
+
+    fig = go.Figure(
+        go.Scattergeo(
+            lon=df["Longitude"],
+            lat=df["Latitude"],
+            mode="markers",
+            marker={
+                "size": 5,
+                "color": df.get("slope", pd.Series([0.0] * len(df))),
+                "cmin": min_s,
+                "cmax": max_s,
+                "colorscale": "YlOrRd",
+                "colorbar": {"title": "Slope"},
+                "opacity": 0.85,
+            },
+            text=[
+                (
+                    f"<b>{row.get('StationName', 'N/A')} ({row.get('StationID', 'N/A')})</b><br>"
+                    f"<b>Observed Slope:</b> {_format_optional_float(row.get('slope'))}<br>"
+                    f"<b>Model Slope:</b> {_format_optional_float(row.get('model_slope'))}<br>"
+                    f"<b>R2:</b> {_format_optional_float(row.get('r_squared'))}<br>"
+                    f"<b>Elevation:</b> {_format_optional_float(row.get('Elevation'), precision=1)} m"
+                )
+                for _, row in df.iterrows()
+            ],
+            hovertemplate="%{text}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title="Station Climate Map Globe",
+        geo={
+            "projection": {"type": "orthographic"},
+            "showland": True,
+            "landcolor": "rgb(232,236,224)",
+            "showocean": True,
+            "oceancolor": "rgb(194,217,236)",
+            "showlakes": True,
+            "lakecolor": "rgb(194,217,236)",
+            "bgcolor": "white",
+        },
+        margin={"l": 10, "r": 10, "t": 50, "b": 10},
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(str(output_path), include_plotlyjs="cdn")

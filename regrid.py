@@ -122,6 +122,22 @@ def _format_tooltip_value(value, precision=2):
     return "{0:.{1}f}".format(float(value), precision)
 
 
+def _derive_globe_output_path(output_map: Path) -> Path:
+    """Return companion globe output path in a sibling globe directory."""
+    if output_map.parent.name == "maps":
+        globe_dir = output_map.parent.parent / "globe"
+    else:
+        globe_dir = output_map.parent / "globe"
+    return globe_dir / f"{output_map.stem}_globe{output_map.suffix}"
+
+
+def _derive_map_output_path(output_map: Path) -> Path:
+    """Route flat map outputs into a maps directory."""
+    if output_map.parent.name == "maps":
+        return output_map
+    return output_map.parent / "maps" / output_map.name
+
+
 def _load_model_predictions(predictions_csv: Path, column_name: str) -> Optional[pd.DataFrame]:
     """Load a model prediction CSV and return cell_id + renamed predicted slope."""
     if not predictions_csv.exists():
@@ -359,8 +375,20 @@ def create_filled_grid_map(
         max_count=int(grid_df["station_count"].max()),
     )
 
+    output_map = _derive_map_output_path(output_map)
     output_map.parent.mkdir(parents=True, exist_ok=True)
     world_map.save(str(output_map))
+
+    # Emit a matching globe HTML next to the flat map.
+    from mapping_3d import create_globe_map
+
+    globe_output_map = _derive_globe_output_path(output_map)
+    globe_output_map.parent.mkdir(parents=True, exist_ok=True)
+    create_globe_map(
+        grid_df=grid_df,
+        output_html=globe_output_map,
+        color_metric=color_metric,
+    )
 
 
 def run_regridding(
@@ -393,12 +421,15 @@ def run_regridding(
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     grid_df.to_csv(output_csv, index=False)
 
+    output_map = _derive_map_output_path(output_map)
     create_filled_grid_map(grid_df, output_map=output_map, color_metric=color_metric)
+    globe_output_map = _derive_globe_output_path(output_map)
 
     print(f"Loaded stations: {len(df)}")
     print(f"Occupied {grid_size}x{grid_size} cells: {len(grid_df)}")
     print(f"Aggregated grid CSV: {output_csv}")
     print(f"Filled grid map: {output_map}")
+    print(f"Globe grid map: {globe_output_map}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -421,7 +452,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-map",
         type=Path,
-        default=Path("output/world_climate_map_grid_5x5.html"),
+        default=Path("output/maps/world_climate_map_grid_5x5.html"),
         help="Output HTML path for the filled 5x5 grid map.",
     )
     parser.add_argument(

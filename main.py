@@ -29,7 +29,7 @@ STATION_DATA_FILE = DATA_DIR / "ghcnm.tavg.v4.0.1.20260224.qcf.dat"
 
 # Output file paths
 STATION_CSV_OUTPUT = OUTPUT_DIR / "station_data.csv"
-MAP_HTML_OUTPUT = OUTPUT_DIR / "world_climate_map.html"
+MAP_HTML_OUTPUT = OUTPUT_DIR / "maps" / "world_climate_map.html"
 
 # Climatological data files
 HUMIDITY_FILE = DATA_DIR / "grid_10min_reh.dat"
